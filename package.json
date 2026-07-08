@@ -14,7 +14,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@aidin36/xmp": "^0.2.2",
+    "@uswriting/exiftool": "^1.0.9",
     "elheif": "^0.1.0",
     "utif": "^3.1.0"
   },

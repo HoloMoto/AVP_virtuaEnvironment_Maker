@@ -1,5 +1,6 @@
-import { writeXmpToHeicAsString } from '@aidin36/xmp';
-import { buildPanoramaXmp, validatePanoramaAspect } from './metadata.js';
+import { writeMetadata } from '@uswriting/exiftool';
+import { buildApplePanoramaTags } from './apple-metadata.js';
+import { validatePanoramaAspect } from './metadata.js';
 import { loadImageFile } from './tiff-loader.js';
 import HeicWorker from './heic-worker.js?worker';
 import './styles.css';
@@ -132,6 +133,7 @@ async function handleConvert() {
 
   const convertBtn = document.getElementById('convert-btn');
   const heading = Number(document.getElementById('heading').value) || 0;
+  const model = document.getElementById('iphone-model').value || 'iPhone 15 Pro';
   const filenameBase = (state.file?.name || 'panorama').replace(/\.[^.]+$/, '');
 
   convertBtn.disabled = true;
@@ -140,18 +142,27 @@ async function handleConvert() {
 
   try {
     const heicBytes = await encodeHeic(state.imageData);
-    setProgress(true, 75, 'パノラマメタデータを埋め込み中…');
+    setProgress(true, 70, 'Appleパノラマメタデータを埋め込み中…');
 
-    const xmp = buildPanoramaXmp({
+    const tags = buildApplePanoramaTags({
       width: state.imageData.width,
       height: state.imageData.height,
       heading,
+      model,
     });
 
-    const withXmp = writeXmpToHeicAsString(heicBytes, xmp);
+    const metaResult = await writeMetadata(
+      { name: 'panorama.heic', data: heicBytes },
+      tags,
+    );
+
+    if (!metaResult.success) {
+      throw new Error(metaResult.error || 'メタデータの埋め込みに失敗しました');
+    }
+
     setProgress(true, 95, 'ダウンロード準備中…');
 
-    const blob = new Blob([withXmp], { type: 'image/heic' });
+    const blob = new Blob([metaResult.data], { type: 'image/heic' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -222,6 +233,15 @@ function render() {
             el('input', { type: 'number', id: 'heading', min: '0', max: '359', value: '0', step: '1' }),
             el('p', { className: 'hint', textContent: 'パノラマの中心が向く方位角（0=北、時計回り）。通常は0のままで問題ありません。' }),
           ]),
+          el('div', { className: 'field' }, [
+            el('label', { for: 'iphone-model', textContent: 'iPhoneモデル名（EXIF）' }),
+            el('select', { id: 'iphone-model' }, [
+              el('option', { value: 'iPhone 15 Pro', textContent: 'iPhone 15 Pro' }),
+              el('option', { value: 'iPhone 16 Pro', textContent: 'iPhone 16 Pro' }),
+              el('option', { value: 'iPhone 14 Pro', textContent: 'iPhone 14 Pro' }),
+            ]),
+            el('p', { className: 'hint', textContent: 'Make / Model / HostComputer に書き込まれます。' }),
+          ]),
           el('div', { className: 'field note-inline' }, [
             el('p', { className: 'hint', textContent: 'HEICエンコードはGitHub Pages互換の方式を使用しています（SharedArrayBuffer不要）。大きな画像ほど時間がかかります。' }),
           ]),
@@ -244,10 +264,11 @@ function render() {
           ]),
           el('h3', { textContent: '埋め込まれるメタデータ' }),
           el('ul', { className: 'tag-list' }, [
+            el('li', { textContent: 'EXIF:CustomRendered = Panorama' }),
+            el('li', { textContent: 'EXIF:Make = Apple / Model = iPhone' }),
+            el('li', { textContent: 'EXIF:TileWidth / TileLength = 512' }),
             el('li', { textContent: 'GPano:UsePanoramaViewer = True' }),
             el('li', { textContent: 'GPano:ProjectionType = equirectangular' }),
-            el('li', { textContent: 'GPano:FullPano / CroppedArea 各ピクセル寸法' }),
-            el('li', { textContent: 'GPano:CaptureSoftware / StitchingSoftware = iPhone' }),
           ]),
           el('p', { className: 'note', textContent: '※ 初回変換時はHEICエンコーダ（約1.5MB）の読み込みに時間がかかります。WebAssembly SIMD対応ブラウザ（Chrome / Edge / Safari 最新版）が必要です。' }),
         ]),
