@@ -9,15 +9,17 @@ Blenderでレンダリングした360°パノラマ（等距円筒 / Equirectang
 ## 機能
 
 - TIFF / PNG / JPEG のアップロード（ドラッグ＆ドロップ対応）
+- **Blender TIFF向けの上下反転**（プレビューで確認可能、デフォルトON）
 - **JPEG（推奨）** または HEIC で出力
 - ブラウザ内完結（サーバーへのアップロードなし）
-- `CustomRendered=Panorama` と **GPano XMP** メタデータを自動埋め込み
+- `CustomRendered=6` と **GPano XMP** メタデータを自動埋め込み
+- **iPhoneパノラマテンプレート**（任意）で MakerNotes をコピーし認識率を向上
 
 ## 埋め込まれるメタデータ
 
 | タグ | 値 |
 |------|-----|
-| `EXIF:CustomRendered` | `Panorama` |
+| `EXIF:CustomRendered` | `6`（Panorama） |
 | `EXIF:Make` | `Apple` |
 | `EXIF:Model` | 選択した iPhone モデル |
 | `GPano:UsePanoramaViewer` | `True` |

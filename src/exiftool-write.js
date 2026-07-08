@@ -62,14 +62,15 @@ function getBlockingStderr(text) {
 
 /**
  * パノラマメタデータを画像に書き込む（JPEG / HEIC）
- * MakerNotes はコピーしない（通常写真のタグがパノラマ判定を妨げるため）
  * @param {Uint8Array} imageBytes
  * @param {Record<string, string | number | boolean>} tags
- * @param {{ filename?: string, fetch?: typeof fetch }} [options]
+ * @param {{ filename?: string, fetch?: typeof fetch, templateBytes?: Uint8Array, templateFilename?: string }} [options]
  */
 export async function writePanoramaMetadata(imageBytes, tags, options = {}) {
   const fetchFn = options.fetch ?? createExiftoolFetch();
   const filename = options.filename ?? 'panorama.jpg';
+  const templateBytes = options.templateBytes;
+  const templateFilename = options.templateFilename ?? 'template.heic';
   const { perl, fileSystem } = await getRuntime(fetchFn);
   const tempFiles = [];
   stdout = '';
@@ -83,12 +84,19 @@ export async function writePanoramaMetadata(imageBytes, tags, options = {}) {
     fileSystem.addFile(inputPath, imageBytes);
     tempFiles.push(inputPath, outputPath);
 
-    const args = [
-      '-P',
-      ...tagsToArgs(tags),
-      '-o', outputPath,
-      inputPath,
-    ];
+    const args = ['-P'];
+
+    if (templateBytes?.length) {
+      const templatePath = `/${templateFilename}`;
+      fileSystem.addFile(templatePath, templateBytes);
+      tempFiles.push(templatePath);
+      args.push(
+        '-TagsFromFile', templatePath,
+        '-MakerNotes', '-Make', '-Model', '-HostComputer', '-Software',
+      );
+    }
+
+    args.push(...tagsToArgs(tags), '-o', outputPath, inputPath);
 
     const result = await perl.runFile('/exiftool', args);
     perl.flush();
