@@ -24,7 +24,7 @@ self.onmessage = async (event) => {
       throw new Error(result.err);
     }
 
-    const heicBytes = result.data;
+    const heicBytes = new Uint8Array(result.data);
     self.postMessage({ id, ok: true, heicBytes }, [heicBytes.buffer]);
   } catch (error) {
     self.postMessage({
