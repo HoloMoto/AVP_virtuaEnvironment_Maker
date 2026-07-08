@@ -6,11 +6,6 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   base: '/AVP_virtuaEnvironment_Maker/',
-  resolve: {
-    alias: {
-      'icodec/heic-only': path.resolve(root, 'node_modules/icodec/lib/heic.js'),
-    },
-  },
   build: {
     outDir: 'docs',
     emptyOutDir: true,
@@ -20,5 +15,8 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+  },
+  optimizeDeps: {
+    include: ['elheif'],
   },
 });

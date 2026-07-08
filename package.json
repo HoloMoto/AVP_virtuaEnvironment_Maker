@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "@aidin36/xmp": "^0.2.2",
-    "icodec": "^0.6.0",
+    "elheif": "^0.1.0",
     "utif": "^3.1.0"
   },
   "devDependencies": {
