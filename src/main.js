@@ -1,5 +1,6 @@
 import { writeMetadata } from '@uswriting/exiftool';
 import { buildApplePanoramaTags } from './apple-metadata.js';
+import { createExiftoolFetch } from './exiftool-fetch.js';
 import { validatePanoramaAspect } from './metadata.js';
 import { loadImageFile } from './tiff-loader.js';
 import HeicWorker from './heic-worker.js?worker';
@@ -105,6 +106,8 @@ function encodeHeic(imageData) {
   });
 }
 
+const exiftoolFetch = createExiftoolFetch();
+
 async function handleFile(file) {
   if (!file) return;
 
@@ -154,6 +157,7 @@ async function handleConvert() {
     const metaResult = await writeMetadata(
       { name: 'panorama.heic', data: heicBytes },
       tags,
+      { fetch: exiftoolFetch },
     );
 
     if (!metaResult.success) {
@@ -270,7 +274,7 @@ function render() {
             el('li', { textContent: 'GPano:UsePanoramaViewer = True' }),
             el('li', { textContent: 'GPano:ProjectionType = equirectangular' }),
           ]),
-          el('p', { className: 'note', textContent: '※ 初回変換時はHEICエンコーダ（約1.5MB）の読み込みに時間がかかります。WebAssembly SIMD対応ブラウザ（Chrome / Edge / Safari 最新版）が必要です。' }),
+          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）の読み込みに時間がかかります。HEICエンコーダ（約1.5MB）も別途必要です。' }),
         ]),
       ]),
       el('footer', { className: 'footer', textContent: 'AVP Virtual Environment Maker — GitHub Pages' }),
