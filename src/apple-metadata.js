@@ -1,6 +1,6 @@
 /**
  * Apple Photos / visionOS がパノラマとして認識しやすい EXIF + XMP タグ
- * GPano XMP だけでは不十分で、CustomRendered=Panorama が重要
+ * CustomRendered=6 (Panorama) + Apple MakerNotes + GPano XMP
  */
 
 /**
@@ -21,17 +21,19 @@ export function buildApplePanoramaTags({
   const headingValue = ((heading % 360) + 360) % 360;
 
   return {
-    // Apple がパノラマ判定に使う EXIF（ExifTool 表示名）
-    CustomRendered: 'Panorama',
-    Make: 'Apple',
+    // Apple パノラマ判定の核心（数値 6 = Panorama）
+    CustomRendered: 6,
     Model: model,
     HostComputer: model,
     Software: '18.5',
-    TileWidth: 512,
-    TileLength: 512,
+    'IFD0:TileWidth': 512,
+    'IFD0:TileLength': 512,
     Orientation: 1,
     ColorSpace: 'sRGB',
-    // GPano XMP
+    XResolution: 72,
+    YResolution: 72,
+    ResolutionUnit: 'inches',
+    // GPano XMP（パノラマビューア用）
     'XMP-GPano:UsePanoramaViewer': 'True',
     'XMP-GPano:ProjectionType': 'equirectangular',
     'XMP-GPano:FullPanoWidthPixels': w,
