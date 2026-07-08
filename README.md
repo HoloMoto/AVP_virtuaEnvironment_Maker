@@ -51,7 +51,7 @@ npm run dev
 npm run build
 ```
 
-`docs/` ディレクトリに静的ファイルが出力されます。`main` ブランチへの push で GitHub Actions により自動デプロイされます。
+`docs/` ディレクトリに静的ファイルが出力されます。GitHub Pages は **main ブランチの `/docs` フォルダ** から配信してください（Settings → Pages → Branch: main, Folder: /docs）。
 
 ## 要件
 
