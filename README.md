@@ -49,12 +49,15 @@ npm run dev
 
 公開URL: https://holomoto.github.io/AVP_virtuaEnvironment_Maker/
 
-### 初回設定（どちらか一方）
+### GitHub Pages 設定
 
-**方法A（推奨）:** Settings → Pages → Source: **Deploy from a branch** → Branch: `main` / Folder: **`/docs`**
+**方法A（推奨）:** Settings → Pages → Source: **Deploy from a branch** → Branch: `main` / Folder: **`/ (root)`**
 
-**方法B:** Settings → Pages → Source: **Deploy from a branch** → Branch: **`gh-pages`** / Folder: **`/ (root)`**  
-（`main` への push 時に GitHub Actions が `gh-pages` ブランチへ自動デプロイします）
+ビルド時に `index.html` と `assets/` がリポジトリルートへ自動同期されます。
+
+**方法B:** Branch: `main` / Folder: **`/docs`**
+
+**方法C:** Branch: **`gh-pages`** / Folder: **`/ (root)`**（`main` push 時に Actions が自動デプロイ）
 
 ## ビルド
 
@@ -62,7 +65,7 @@ npm run dev
 npm run build
 ```
 
-`docs/` ディレクトリに静的ファイルが出力されます。
+`docs/` にビルド後、ルートの `index.html` / `assets/` へ同期されます。
 
 ## 要件
 

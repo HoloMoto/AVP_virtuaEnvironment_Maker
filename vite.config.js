@@ -14,6 +14,9 @@ export default defineConfig({
   build: {
     outDir: 'docs',
     emptyOutDir: true,
+    rollupOptions: {
+      input: path.resolve(root, 'index.dev.html'),
+    },
   },
   worker: {
     format: 'es',
