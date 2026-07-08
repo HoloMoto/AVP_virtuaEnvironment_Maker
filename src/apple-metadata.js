@@ -22,7 +22,8 @@ export function buildApplePanoramaTags({
 
   return {
     // Apple パノラマ判定の核心（数値 6 = Panorama）
-    CustomRendered: 'Panorama',
+    'ExifIFD:CustomRendered': 6,
+    CustomRendered: 6,
     Make: 'Apple',
     Model: model,
     HostComputer: model,
@@ -47,6 +48,7 @@ export function buildApplePanoramaTags({
     'XMP-GPano:InitialViewHeadingDegrees': headingValue,
     'XMP-GPano:InitialViewPitchDegrees': 0,
     'XMP-GPano:InitialViewRollDegrees': 0,
+    'XMP-GPano:InitialHorizontalFOVDegrees': 75,
     'XMP-GPano:CaptureSoftware': 'iPhone',
     'XMP-GPano:StitchingSoftware': 'iPhone',
   };

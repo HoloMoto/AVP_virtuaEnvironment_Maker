@@ -2,16 +2,19 @@ import { parseMetadata } from '@uswriting/exiftool';
 import { buildApplePanoramaTags } from './apple-metadata.js';
 import { createExiftoolFetch } from './exiftool-fetch.js';
 import { writePanoramaMetadata } from './exiftool-write.js';
+import { applyImageTransforms } from './image-transform.js';
 import { encodeJpeg } from './jpeg-encode.js';
 import { validatePanoramaAspect } from './metadata.js';
-import { loadImageFile } from './tiff-loader.js';
+import { isTiffFile, loadImageFile } from './tiff-loader.js';
 import HeicWorker from './heic-worker.js?worker';
 import './styles.css';
 
 const state = {
   file: null,
+  rawImageData: null,
   imageData: null,
   previewUrl: null,
+  templateFile: null,
   worker: null,
   jobId: 0,
 };
@@ -50,6 +53,21 @@ function setProgress(visible, value = 0, label = '') {
   wrap.hidden = !visible;
   bar.style.width = `${value}%`;
   text.textContent = label;
+}
+
+function getFlipVertical() {
+  const checkbox = document.getElementById('flip-vertical');
+  return checkbox ? checkbox.checked : false;
+}
+
+function refreshImageData() {
+  if (!state.rawImageData) {
+    state.imageData = null;
+    return;
+  }
+  state.imageData = applyImageTransforms(state.rawImageData, {
+    flipVertical: getFlipVertical(),
+  });
 }
 
 function updatePreview() {
@@ -118,19 +136,45 @@ async function handleFile(file) {
 
   try {
     state.file = file;
-    state.imageData = await loadImageFile(file);
+    state.rawImageData = await loadImageFile(file);
+    const flipCheckbox = document.getElementById('flip-vertical');
+    if (flipCheckbox) {
+      flipCheckbox.checked = isTiffFile(file);
+    }
+    refreshImageData();
     updatePreview();
     document.getElementById('convert-btn').disabled = false;
     setProgress(false);
-    setStatus(`${file.name} を読み込みました（${formatBytes(file.size)}）`, 'success');
+    const flipNote = isTiffFile(file) ? '（Blender TIFF向けに上下反転を自動適用）' : '';
+    setStatus(`${file.name} を読み込みました（${formatBytes(file.size)}）${flipNote}`, 'success');
   } catch (error) {
     state.file = null;
+    state.rawImageData = null;
     state.imageData = null;
     updatePreview();
     document.getElementById('convert-btn').disabled = true;
     setProgress(false);
     setStatus(error instanceof Error ? error.message : '読み込みに失敗しました', 'error');
   }
+}
+
+async function handleTemplateFile(file) {
+  const label = document.getElementById('template-label');
+  if (!file) {
+    state.templateFile = null;
+    if (label) label.textContent = '未選択（任意）';
+    return;
+  }
+
+  const name = file.name.toLowerCase();
+  if (!name.endsWith('.heic') && !name.endsWith('.jpg') && !name.endsWith('.jpeg')) {
+    setStatus('テンプレートは HEIC または JPEG の iPhone パノラマ写真を選んでください', 'error');
+    return;
+  }
+
+  state.templateFile = file;
+  if (label) label.textContent = `${file.name}（${formatBytes(file.size)}）`;
+  setStatus(`パノラマテンプレート: ${file.name}`, 'success');
 }
 
 async function handleConvert() {
@@ -168,10 +212,17 @@ async function handleConvert() {
       model,
     });
 
-    const metaResult = await writePanoramaMetadata(imageBytes, tags, {
+    const writeOptions = {
       fetch: exiftoolFetch,
       filename: `panorama.${ext}`,
-    });
+    };
+
+    if (state.templateFile) {
+      writeOptions.templateBytes = new Uint8Array(await state.templateFile.arrayBuffer());
+      writeOptions.templateFilename = state.templateFile.name;
+    }
+
+    const metaResult = await writePanoramaMetadata(imageBytes, tags, writeOptions);
 
     if (!metaResult.success) {
       throw new Error(metaResult.error || 'メタデータの埋め込みに失敗しました');
@@ -181,11 +232,15 @@ async function handleConvert() {
       { name: `panorama.${ext}`, data: metaResult.data },
       {
         fetch: exiftoolFetch,
-        args: ['-G1', '-a', '-s', '-CustomRendered', '-Make', '-Model', '-XMP-GPano:UsePanoramaViewer'],
+        args: ['-G1', '-a', '-s', '-ExifIFD:CustomRendered', '-Make', '-Model', '-XMP-GPano:UsePanoramaViewer', '-XMP-GPano:ProjectionType'],
       },
     );
     const verifyText = String(verify.data || '');
-    if (!verify.success || (!verifyText.includes('Panorama') && !/\b6\b/.test(verifyText))) {
+    if (
+      !verify.success
+      || (!/\b6\b/.test(verifyText) && !verifyText.includes('Panorama'))
+      || !verifyText.includes('equirectangular')
+    ) {
       throw new Error('パノラマメタデータの検証に失敗しました。もう一度お試しください。');
     }
 
@@ -232,6 +287,7 @@ function setupDropZone(zone, input) {
 function render() {
   const root = document.getElementById('app');
   const fileInput = el('input', { type: 'file', id: 'file-input', accept: '.tif,.tiff,.png,.jpg,.jpeg,image/tiff,image/png,image/jpeg', hidden: true });
+  const templateInput = el('input', { type: 'file', id: 'template-input', accept: '.heic,.jpg,.jpeg,image/heic,image/jpeg', hidden: true });
   const dropZone = el('div', { className: 'drop-zone', id: 'drop-zone' }, [
     el('div', { className: 'drop-icon', textContent: '📷' }),
     el('p', { className: 'drop-title', textContent: 'TIFF / 画像をドロップ、またはクリックして選択' }),
@@ -257,6 +313,13 @@ function render() {
         ]),
         el('section', { className: 'card' }, [
           el('h2', { textContent: '2. オプション' }),
+          el('div', { className: 'field checkbox-field' }, [
+            el('label', { className: 'checkbox-label', for: 'flip-vertical' }, [
+              el('input', { type: 'checkbox', id: 'flip-vertical', checked: true }),
+              el('span', { textContent: '上下を反転（Blender TIFF向け）' }),
+            ]),
+            el('p', { className: 'hint', textContent: 'Blenderの等距円筒TIFFは上下が逆になることが多いです。プレビューで向きを確認し、必要に応じて切り替えてください。' }),
+          ]),
           el('div', { className: 'field' }, [
             el('label', { for: 'output-format', textContent: '出力形式' }),
             el('select', { id: 'output-format' }, [
@@ -278,6 +341,20 @@ function render() {
               el('option', { value: 'iPhone 14 Pro', textContent: 'iPhone 14 Pro' }),
             ]),
             el('p', { className: 'hint', textContent: 'Make / Model / HostComputer に書き込まれます。' }),
+          ]),
+          el('div', { className: 'field' }, [
+            el('label', { textContent: 'iPhoneパノラマテンプレート（任意・認識率向上）' }),
+            el('div', { className: 'template-row' }, [
+              el('button', {
+                type: 'button',
+                className: 'secondary',
+                onClick: () => templateInput.click(),
+                textContent: 'テンプレートを選択',
+              }),
+              el('span', { id: 'template-label', className: 'template-label', textContent: '未選択（任意）' }),
+            ]),
+            templateInput,
+            el('p', { className: 'hint', textContent: 'iPhoneで撮影したパノラマ写真（HEIC/JPEG）を指定すると、MakerNotesをコピーして認識率が上がる場合があります。' }),
           ]),
           el('div', { className: 'field note-inline' }, [
             el('p', { className: 'hint', textContent: 'HEICエンコード時のみWorkerを使用します（SharedArrayBuffer不要）。JPEGはブラウザ標準エンコーダを使うため高速です。' }),
@@ -307,7 +384,7 @@ function render() {
             el('li', { textContent: 'GPano:ProjectionType = equirectangular' }),
             el('li', { textContent: 'GPano:FullPano / CroppedArea 各寸法' }),
           ]),
-          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）の読み込みに時間がかかります。取り込み後もパノラマ表示にならない場合は、Macで実機撮影のパノラマ1枚をテンプレートにExifToolでタグをコピーする方法もあります（README参照）。' }),
+          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）の読み込みに時間がかかります。取り込み後もパノラマ表示にならない場合は、上記のiPhoneパノラマテンプレートを指定するか、MacでExifToolを使う方法もあります（README参照）。' }),
         ]),
       ]),
       el('footer', { className: 'footer', textContent: 'AVP Virtual Environment Maker — GitHub Pages' }),
@@ -315,6 +392,17 @@ function render() {
   );
 
   setupDropZone(dropZone, fileInput);
+
+  document.getElementById('flip-vertical').addEventListener('change', () => {
+    refreshImageData();
+    updatePreview();
+  });
+
+  templateInput.addEventListener('change', () => {
+    const file = templateInput.files?.[0];
+    handleTemplateFile(file ?? null);
+    templateInput.value = '';
+  });
 }
 
 render();
