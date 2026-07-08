@@ -2,6 +2,7 @@ import { parseMetadata } from '@uswriting/exiftool';
 import { buildApplePanoramaTags } from './apple-metadata.js';
 import { createExiftoolFetch } from './exiftool-fetch.js';
 import { writePanoramaMetadata } from './exiftool-write.js';
+import { encodeJpeg } from './jpeg-encode.js';
 import { validatePanoramaAspect } from './metadata.js';
 import { loadImageFile } from './tiff-loader.js';
 import HeicWorker from './heic-worker.js?worker';
@@ -138,15 +139,27 @@ async function handleConvert() {
   const convertBtn = document.getElementById('convert-btn');
   const heading = Number(document.getElementById('heading').value) || 0;
   const model = document.getElementById('iphone-model').value || 'iPhone 15 Pro';
+  const format = document.getElementById('output-format').value || 'jpeg';
   const filenameBase = (state.file?.name || 'panorama').replace(/\.[^.]+$/, '');
+  const isJpeg = format === 'jpeg';
+  const ext = isJpeg ? 'jpg' : 'heic';
+  const mime = isJpeg ? 'image/jpeg' : 'image/heic';
 
   convertBtn.disabled = true;
-  setStatus('HEICにエンコードしています…（大きな画像は数分かかることがあります）', 'info');
-  setProgress(true, 35, 'HEICエンコード中…');
+  setStatus(
+    isJpeg
+      ? 'JPEGにエンコードしています…'
+      : 'HEICにエンコードしています…（大きな画像は数分かかることがあります）',
+    'info',
+  );
+  setProgress(true, isJpeg ? 25 : 35, isJpeg ? 'JPEGエンコード中…' : 'HEICエンコード中…');
 
   try {
-    const heicBytes = await encodeHeic(state.imageData);
-    setProgress(true, 70, 'Appleパノラマメタデータを埋め込み中…');
+    const imageBytes = isJpeg
+      ? await encodeJpeg(state.imageData)
+      : await encodeHeic(state.imageData);
+
+    setProgress(true, 70, 'パノラマメタデータを埋め込み中…');
 
     const tags = buildApplePanoramaTags({
       width: state.imageData.width,
@@ -155,35 +168,39 @@ async function handleConvert() {
       model,
     });
 
-    const metaResult = await writePanoramaMetadata(heicBytes, tags, { fetch: exiftoolFetch });
+    const metaResult = await writePanoramaMetadata(imageBytes, tags, {
+      fetch: exiftoolFetch,
+      filename: `panorama.${ext}`,
+    });
 
     if (!metaResult.success) {
       throw new Error(metaResult.error || 'メタデータの埋め込みに失敗しました');
     }
 
     const verify = await parseMetadata(
-      { name: 'panorama.heic', data: metaResult.data },
+      { name: `panorama.${ext}`, data: metaResult.data },
       {
         fetch: exiftoolFetch,
-        args: ['-G1', '-a', '-s', '-CustomRendered', '-n', '-Make', '-Model', '-IFD0:TileWidth', '-MakerNoteVersion', '-XMP-GPano:UsePanoramaViewer'],
+        args: ['-G1', '-a', '-s', '-CustomRendered', '-Make', '-Model', '-XMP-GPano:UsePanoramaViewer'],
       },
     );
-    if (!verify.success || !String(verify.data).includes('CustomRendered')) {
+    const verifyText = String(verify.data || '');
+    if (!verify.success || (!verifyText.includes('Panorama') && !/\b6\b/.test(verifyText))) {
       throw new Error('パノラマメタデータの検証に失敗しました。もう一度お試しください。');
     }
 
     setProgress(true, 95, 'ダウンロード準備中…');
 
-    const blob = new Blob([metaResult.data], { type: 'image/heic' });
+    const blob = new Blob([metaResult.data], { type: mime });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${filenameBase}_panorama.heic`;
+    link.download = `${filenameBase}_panorama.${ext}`;
     link.click();
     URL.revokeObjectURL(url);
 
     setProgress(true, 100, '完了');
-    setStatus(`変換完了: ${filenameBase}_panorama.heic（${formatBytes(blob.size)}）`, 'success');
+    setStatus(`変換完了: ${filenameBase}_panorama.${ext}（${formatBytes(blob.size)}）`, 'success');
     setTimeout(() => setProgress(false), 1200);
   } catch (error) {
     setProgress(false);
@@ -226,7 +243,7 @@ function render() {
       el('header', { className: 'hero' }, [
         el('p', { className: 'eyebrow', textContent: 'Apple Vision Pro / visionOS 27' }),
         el('h1', { textContent: 'AVP Virtual Environment Maker' }),
-        el('p', { className: 'subtitle', textContent: 'Blenderでレンダリングした360°パノラマTIFFを、iPhoneで撮影したパノラマとして認識されるHEICに変換します。visionOS 27の「パノラマを空間シーン化してEnvironmentに設定」機能で使えます。' }),
+        el('p', { className: 'subtitle', textContent: 'Blenderでレンダリングした360°パノラマTIFFを、写真アプリがパノラマとして認識しやすいJPEG/HEICに変換します。visionOS 27の「パノラマを空間シーン化してEnvironmentに設定」機能で使えます。' }),
       ]),
       el('main', { className: 'layout' }, [
         el('section', { className: 'card' }, [
@@ -240,6 +257,14 @@ function render() {
         ]),
         el('section', { className: 'card' }, [
           el('h2', { textContent: '2. オプション' }),
+          el('div', { className: 'field' }, [
+            el('label', { for: 'output-format', textContent: '出力形式' }),
+            el('select', { id: 'output-format' }, [
+              el('option', { value: 'jpeg', textContent: 'JPEG（推奨・パノラマ認識向け）' }),
+              el('option', { value: 'heic', textContent: 'HEIC（ファイルサイズ小）' }),
+            ]),
+            el('p', { className: 'hint', textContent: '写真アプリでのパノラマ認識はJPEGの方が成功率が高い傾向があります。HEICは表示はできますがパノラマUIにならない場合があります。' }),
+          ]),
           el('div', { className: 'field' }, [
             el('label', { for: 'heading', textContent: '初期の向き（PoseHeadingDegrees）' }),
             el('input', { type: 'number', id: 'heading', min: '0', max: '359', value: '0', step: '1' }),
@@ -255,12 +280,12 @@ function render() {
             el('p', { className: 'hint', textContent: 'Make / Model / HostComputer に書き込まれます。' }),
           ]),
           el('div', { className: 'field note-inline' }, [
-            el('p', { className: 'hint', textContent: 'HEICエンコードはGitHub Pages互換の方式を使用しています（SharedArrayBuffer不要）。大きな画像ほど時間がかかります。' }),
+            el('p', { className: 'hint', textContent: 'HEICエンコード時のみWorkerを使用します（SharedArrayBuffer不要）。JPEGはブラウザ標準エンコーダを使うため高速です。' }),
           ]),
         ]),
         el('section', { className: 'card actions' }, [
           el('h2', { textContent: '3. 変換してダウンロード' }),
-          el('button', { id: 'convert-btn', className: 'primary', disabled: true, onClick: handleConvert, textContent: 'HEICに変換してダウンロード' }),
+          el('button', { id: 'convert-btn', className: 'primary', disabled: true, onClick: handleConvert, textContent: 'パノラマに変換してダウンロード' }),
           el('div', { id: 'progress-wrap', hidden: true }, [
             el('div', { className: 'progress-track' }, [el('div', { id: 'progress-bar', className: 'progress-bar' })]),
             el('p', { id: 'progress-label', className: 'progress-label' }),
@@ -271,19 +296,18 @@ function render() {
           el('h2', { textContent: '使い方（Blender → visionOS）' }),
           el('ol', {}, [
             el('li', { textContent: 'Blender: カメラをパノラマ（等距円筒 / Equirectangular）でレンダリングし、TIFFまたはPNGで書き出す。' }),
-            el('li', { textContent: 'このツールでHEICに変換し、AirDropやiCloud経由でiPhone / Vision Proの写真アプリへ取り込む。' }),
+            el('li', { textContent: 'このツールでJPEG（推奨）またはHEICに変換し、AirDropやiCloud経由でiPhone / Vision Proの写真アプリへ取り込む。' }),
             el('li', { textContent: 'visionOS 27: 写真アプリでパノラマを開き、「空間シーンに変換」→ Environmentとして設定。' }),
           ]),
           el('h3', { textContent: '埋め込まれるメタデータ' }),
           el('ul', { className: 'tag-list' }, [
-            el('li', { textContent: 'EXIF:CustomRendered = 6 (Panorama)' }),
-            el('li', { textContent: 'Apple MakerNotes（iPhoneテンプレートからコピー）' }),
+            el('li', { textContent: 'EXIF:CustomRendered = Panorama' }),
             el('li', { textContent: 'EXIF:Make = Apple / Model = iPhone' }),
-            el('li', { textContent: 'EXIF:TileWidth / TileLength = 512' }),
             el('li', { textContent: 'GPano:UsePanoramaViewer = True' }),
             el('li', { textContent: 'GPano:ProjectionType = equirectangular' }),
+            el('li', { textContent: 'GPano:FullPano / CroppedArea 各寸法' }),
           ]),
-          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）と iPhoneテンプレート（約2MB）の読み込みに時間がかかります。' }),
+          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）の読み込みに時間がかかります。取り込み後もパノラマ表示にならない場合は、Macで実機撮影のパノラマ1枚をテンプレートにExifToolでタグをコピーする方法もあります（README参照）。' }),
         ]),
       ]),
       el('footer', { className: 'footer', textContent: 'AVP Virtual Environment Maker — GitHub Pages' }),
