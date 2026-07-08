@@ -22,7 +22,7 @@ export function buildApplePanoramaTags({
 
   return {
     // Apple パノラマ判定の核心（数値 6 = Panorama）
-    CustomRendered: 6,
+    CustomRendered: 'Panorama',
     Model: model,
     HostComputer: model,
     Software: '18.5',
