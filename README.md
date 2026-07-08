@@ -1,6 +1,6 @@
 # AVP Virtual Environment Maker
 
-Blenderでレンダリングした360°パノラマ（等距円筒 / Equirectangular）TIFF画像を、**iPhoneで撮影したパノラマとして認識されるHEIC**に変換するブラウザツールです。
+Blenderでレンダリングした360°パノラマ（等距円筒 / Equirectangular）TIFF画像を、**写真アプリがパノラマとして認識しやすい JPEG / HEIC** に変換するブラウザツールです。
 
 [visionOS 27](https://www.apple.com/os/visionos/) では、パノラマ写真を空間シーンに変換し、カスタム **Environment（没入型背景）** として使えるようになります。このツールは、Blenderで作成したバーチャル空間をその機能で利用するためのものです。
 
@@ -9,22 +9,23 @@ Blenderでレンダリングした360°パノラマ（等距円筒 / Equirectang
 ## 機能
 
 - TIFF / PNG / JPEG のアップロード（ドラッグ＆ドロップ対応）
-- ブラウザ内での HEIC エンコード（サーバーへのアップロードなし）
-- iPhone パノラマ互換の **GPano XMP メタデータ** を自動埋め込み
-- HEIC ファイルのダウンロード
+- **JPEG（推奨）** または HEIC で出力
+- ブラウザ内完結（サーバーへのアップロードなし）
+- `CustomRendered=Panorama` と **GPano XMP** メタデータを自動埋め込み
 
 ## 埋め込まれるメタデータ
 
 | タグ | 値 |
 |------|-----|
+| `EXIF:CustomRendered` | `Panorama` |
+| `EXIF:Make` | `Apple` |
+| `EXIF:Model` | 選択した iPhone モデル |
 | `GPano:UsePanoramaViewer` | `True` |
 | `GPano:ProjectionType` | `equirectangular` |
 | `GPano:FullPanoWidthPixels` | 画像幅 |
 | `GPano:FullPanoHeightPixels` | 画像高さ |
 | `GPano:CroppedAreaImageWidthPixels` | 画像幅 |
 | `GPano:CroppedAreaImageHeightPixels` | 画像高さ |
-| `GPano:CaptureSoftware` | `iPhone` |
-| `GPano:StitchingSoftware` | `iPhone` |
 
 ## Blender での推奨設定
 
@@ -34,9 +35,24 @@ Blenderでレンダリングした360°パノラマ（等距円筒 / Equirectang
 
 ## visionOS での使い方
 
-1. 変換した HEIC を AirDrop / iCloud 経由で Vision Pro または iPhone の写真アプリへ取り込む
-2. 写真アプリでパノラマを開く
+1. **JPEG（推奨）** で変換し、AirDrop / iCloud 経由で Vision Pro または iPhone の写真アプリへ取り込む
+2. 写真アプリで **横スワイプのパノラマ表示** になるか確認
 3. visionOS 27: **空間シーンに変換** → **Environment として設定**
+
+### パノラマとして認識されない場合（Mac + ExifTool）
+
+iPhone で実際に撮影したパノラマ1枚（`template.heic`）がある場合、変換後のファイルにタグをコピーできます。
+
+```bash
+exiftool -overwrite_original -P \
+  -TagsFromFile template.heic -MakerNotes -Make -Model -HostComputer \
+  -CustomRendered=Panorama \
+  -XMP-GPano:UsePanoramaViewer=True \
+  -XMP-GPano:ProjectionType=equirectangular \
+  your_panorama.jpg
+```
+
+その後、写真アプリへ再取り込みしてください。
 
 ## ローカル開発
 

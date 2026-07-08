@@ -1,6 +1,5 @@
 import { MemoryFileSystem, ZeroPerl } from '@6over3/zeroperl-ts';
 import exiftoolScript from './vendor/exiftool.pl?raw';
-import templateUrl from '../public/iphone-makernotes-template.heic?url';
 import { createExiftoolFetch } from './exiftool-fetch.js';
 
 const decoder = new TextDecoder();
@@ -12,6 +11,8 @@ let stderr = '';
 const IGNORABLE_STDERR = [
   /Error setting file time/i,
   /\[minor\]/i,
+  /Item info entries are out of order/i,
+  /Can't convert ExifIFD:CustomRendered/i,
 ];
 
 async function getRuntime(fetchFn) {
@@ -59,26 +60,16 @@ function getBlockingStderr(text) {
   return lines.filter((line) => !IGNORABLE_STDERR.some((re) => re.test(line))).join('\n');
 }
 
-let templateBytesPromise = null;
-
-function getTemplateBytes() {
-  if (!templateBytesPromise) {
-    templateBytesPromise = fetch(templateUrl).then(async (res) => {
-      if (!res.ok) throw new Error('iPhoneメタデータテンプレートの読み込みに失敗しました');
-      return new Uint8Array(await res.arrayBuffer());
-    });
-  }
-  return templateBytesPromise;
-}
-
 /**
- * HEICにAppleパノラマメタデータを書き込む（MakerNotesテンプレート + GPano）
- * @param {Uint8Array} heicBytes
+ * パノラマメタデータを画像に書き込む（JPEG / HEIC）
+ * MakerNotes はコピーしない（通常写真のタグがパノラマ判定を妨げるため）
+ * @param {Uint8Array} imageBytes
  * @param {Record<string, string | number | boolean>} tags
- * @param {{ fetch?: typeof fetch }} [options]
+ * @param {{ filename?: string, fetch?: typeof fetch }} [options]
  */
-export async function writePanoramaMetadata(heicBytes, tags, options = {}) {
+export async function writePanoramaMetadata(imageBytes, tags, options = {}) {
   const fetchFn = options.fetch ?? createExiftoolFetch();
+  const filename = options.filename ?? 'panorama.jpg';
   const { perl, fileSystem } = await getRuntime(fetchFn);
   const tempFiles = [];
   stdout = '';
@@ -86,18 +77,14 @@ export async function writePanoramaMetadata(heicBytes, tags, options = {}) {
   await perl.reset();
 
   try {
-    const inputPath = '/panorama.heic';
-    const templatePath = '/template.heic';
+    const inputPath = `/${filename}`;
     const outputPath = `/${crypto.randomUUID().replace(/-/g, '')}.tmp`;
 
-    fileSystem.addFile(inputPath, heicBytes);
-    fileSystem.addFile(templatePath, await getTemplateBytes());
-    tempFiles.push(inputPath, templatePath, outputPath);
+    fileSystem.addFile(inputPath, imageBytes);
+    tempFiles.push(inputPath, outputPath);
 
     const args = [
       '-P',
-      '-TagsFromFile', templatePath,
-      '-MakerNotes', '-Make', '-Model', '-HostComputer', '-Software',
       ...tagsToArgs(tags),
       '-o', outputPath,
       inputPath,
@@ -113,14 +100,19 @@ export async function writePanoramaMetadata(heicBytes, tags, options = {}) {
       };
     }
 
-    const blockingStderr = getBlockingStderr(stderr);
-    if (blockingStderr) {
-      return { success: false, error: blockingStderr };
-    }
-
     const node = fileSystem.lookup(outputPath);
     if (!node || node.type !== 'file') {
-      return { success: false, error: 'メタデータ書き込み後のファイルが見つかりません' };
+      const blockingStderr = getBlockingStderr(stderr);
+      return {
+        success: false,
+        error: blockingStderr || 'メタデータ書き込み後のファイルが見つかりません',
+      };
+    }
+
+    const blockingStderr = getBlockingStderr(stderr);
+    if (blockingStderr) {
+      // 出力ファイルがあれば警告のみとして続行
+      console.warn('ExifTool warnings:', blockingStderr);
     }
 
     const outputData = node.content instanceof Blob
