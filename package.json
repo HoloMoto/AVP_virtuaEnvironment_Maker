@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite index.dev.html",
+    "prebuild": "node scripts/sync-exiftool-pl.mjs",
     "build": "vite build && node scripts/sync-pages-root.mjs",
     "preview": "vite preview"
   },
