@@ -1,6 +1,7 @@
-import { writeMetadata } from '@uswriting/exiftool';
+import { parseMetadata } from '@uswriting/exiftool';
 import { buildApplePanoramaTags } from './apple-metadata.js';
 import { createExiftoolFetch } from './exiftool-fetch.js';
+import { writePanoramaMetadata } from './exiftool-write.js';
 import { validatePanoramaAspect } from './metadata.js';
 import { loadImageFile } from './tiff-loader.js';
 import HeicWorker from './heic-worker.js?worker';
@@ -154,14 +155,21 @@ async function handleConvert() {
       model,
     });
 
-    const metaResult = await writeMetadata(
-      { name: 'panorama.heic', data: heicBytes },
-      tags,
-      { fetch: exiftoolFetch },
-    );
+    const metaResult = await writePanoramaMetadata(heicBytes, tags, { fetch: exiftoolFetch });
 
     if (!metaResult.success) {
       throw new Error(metaResult.error || 'メタデータの埋め込みに失敗しました');
+    }
+
+    const verify = await parseMetadata(
+      { name: 'panorama.heic', data: metaResult.data },
+      {
+        fetch: exiftoolFetch,
+        args: ['-G1', '-a', '-s', '-CustomRendered', '-n', '-Make', '-Model', '-IFD0:TileWidth', '-MakerNoteVersion', '-XMP-GPano:UsePanoramaViewer'],
+      },
+    );
+    if (!verify.success || !String(verify.data).includes('CustomRendered')) {
+      throw new Error('パノラマメタデータの検証に失敗しました。もう一度お試しください。');
     }
 
     setProgress(true, 95, 'ダウンロード準備中…');
@@ -268,13 +276,14 @@ function render() {
           ]),
           el('h3', { textContent: '埋め込まれるメタデータ' }),
           el('ul', { className: 'tag-list' }, [
-            el('li', { textContent: 'EXIF:CustomRendered = Panorama' }),
+            el('li', { textContent: 'EXIF:CustomRendered = 6 (Panorama)' }),
+            el('li', { textContent: 'Apple MakerNotes（iPhoneテンプレートからコピー）' }),
             el('li', { textContent: 'EXIF:Make = Apple / Model = iPhone' }),
             el('li', { textContent: 'EXIF:TileWidth / TileLength = 512' }),
             el('li', { textContent: 'GPano:UsePanoramaViewer = True' }),
             el('li', { textContent: 'GPano:ProjectionType = equirectangular' }),
           ]),
-          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）の読み込みに時間がかかります。HEICエンコーダ（約1.5MB）も別途必要です。' }),
+          el('p', { className: 'note', textContent: '※ 初回のメタデータ埋め込み時は ExifTool（約25MB WASM）と iPhoneテンプレート（約2MB）の読み込みに時間がかかります。' }),
         ]),
       ]),
       el('footer', { className: 'footer', textContent: 'AVP Virtual Environment Maker — GitHub Pages' }),
