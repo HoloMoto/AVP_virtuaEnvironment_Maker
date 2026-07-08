@@ -79,7 +79,7 @@ function getWorker() {
   return state.worker;
 }
 
-function encodeHeic(imageData, quality) {
+function encodeHeic(imageData) {
   return new Promise((resolve, reject) => {
     const worker = getWorker();
     const id = ++state.jobId;
@@ -100,7 +100,6 @@ function encodeHeic(imageData, quality) {
         height: imageData.height,
         data: imageData.data,
       },
-      options: { quality },
     });
   });
 }
@@ -133,7 +132,6 @@ async function handleConvert() {
 
   const convertBtn = document.getElementById('convert-btn');
   const heading = Number(document.getElementById('heading').value) || 0;
-  const quality = Number(document.getElementById('quality').value) || 85;
   const filenameBase = (state.file?.name || 'panorama').replace(/\.[^.]+$/, '');
 
   convertBtn.disabled = true;
@@ -141,7 +139,7 @@ async function handleConvert() {
   setProgress(true, 35, 'HEICエンコード中…');
 
   try {
-    const heicBytes = await encodeHeic(state.imageData, quality);
+    const heicBytes = await encodeHeic(state.imageData);
     setProgress(true, 75, 'パノラマメタデータを埋め込み中…');
 
     const xmp = buildPanoramaXmp({
@@ -224,10 +222,8 @@ function render() {
             el('input', { type: 'number', id: 'heading', min: '0', max: '359', value: '0', step: '1' }),
             el('p', { className: 'hint', textContent: 'パノラマの中心が向く方位角（0=北、時計回り）。通常は0のままで問題ありません。' }),
           ]),
-          el('div', { className: 'field' }, [
-            el('label', { for: 'quality', textContent: 'HEIC品質' }),
-            el('input', { type: 'range', id: 'quality', min: '50', max: '100', value: '85' }),
-            el('p', { className: 'hint', textContent: '高品質ほどファイルサイズが大きくなり、エンコード時間も長くなります。' }),
+          el('div', { className: 'field note-inline' }, [
+            el('p', { className: 'hint', textContent: 'HEICエンコードはGitHub Pages互換の方式を使用しています（SharedArrayBuffer不要）。大きな画像ほど時間がかかります。' }),
           ]),
         ]),
         el('section', { className: 'card actions' }, [
@@ -253,7 +249,7 @@ function render() {
             el('li', { textContent: 'GPano:FullPano / CroppedArea 各ピクセル寸法' }),
             el('li', { textContent: 'GPano:CaptureSoftware / StitchingSoftware = iPhone' }),
           ]),
-          el('p', { className: 'note', textContent: '※ 初回変換時はHEICエンコーダ（WASM）の読み込みに時間がかかります。WebAssembly SIMD対応ブラウザ（Chrome / Edge / Safari 最新版）が必要です。' }),
+          el('p', { className: 'note', textContent: '※ 初回変換時はHEICエンコーダ（約1.5MB）の読み込みに時間がかかります。WebAssembly SIMD対応ブラウザ（Chrome / Edge / Safari 最新版）が必要です。' }),
         ]),
       ]),
       el('footer', { className: 'footer', textContent: 'AVP Virtual Environment Maker — GitHub Pages' }),
