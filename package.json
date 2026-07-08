@@ -1,0 +1,24 @@
+{
+  "name": "avp-virtual-environment-maker",
+  "version": "1.0.0",
+  "description": "BlenderパノラマTIFFをvisionOS用iPhoneパノラマHEICに変換するGitHub Pagesツール",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HoloMoto/AVP_virtuaEnvironment_Maker.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@aidin36/xmp": "^0.2.2",
+    "icodec": "^0.6.0",
+    "utif": "^3.1.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.4"
+  }
+}
